@@ -31,6 +31,7 @@ export default function TreatmentDetailPage() {
   const { user }  = useAuth()
 
   const [treatment,  setTreatment]  = useState(null)
+  const [kbItem,     setKbItem]     = useState(null)
   const [loading,    setLoading]    = useState(true)
   const [showModal,  setShowModal]  = useState(false)
   const [deleting,   setDeleting]   = useState(false)
@@ -40,13 +41,28 @@ export default function TreatmentDetailPage() {
 
   async function fetchTreatment() {
     setLoading(true)
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('treatments')
-      .select('*, clinics(name), kb_treatments(id, name)')
+      .select('*, clinics(name)')
       .eq('id', id)
       .eq('user_id', user.id)
       .single()
-    setTreatment(data)
+    if (data) {
+      setTreatment(data)
+      // 单独获取关联的知识库项目名称
+      if (data.kb_treatment_id) {
+        const { data: kb } = await supabase
+          .from('kb_treatments')
+          .select('id, name')
+          .eq('id', data.kb_treatment_id)
+          .single()
+        setKbItem(kb ?? null)
+      } else {
+        setKbItem(null)
+      }
+    } else {
+      setTreatment(null)
+    }
     setLoading(false)
   }
 
@@ -135,14 +151,14 @@ export default function TreatmentDetailPage() {
         </div>
 
         {/* KB aftercare link */}
-        {treatment.kb_treatments && (
+        {kbItem && (
           <div className="bg-blush-light rounded-[20px] px-6 py-5 mb-5 flex items-center justify-between">
             <div>
               <p className="text-[10px] font-sans tracking-[0.2em] text-ink-soft uppercase mb-1">知识库关联</p>
-              <p className="text-[14px] text-ink font-sans">{treatment.kb_treatments.name}</p>
+              <p className="text-[14px] text-ink font-sans">{kbItem.name}</p>
             </div>
             <button
-              onClick={() => navigate(`/knowledge/${treatment.kb_treatments.id}`)}
+              onClick={() => navigate(`/knowledge/${kbItem.id}`)}
               className="text-[12px] text-gold font-sans hover:underline whitespace-nowrap">
               查看术后注意事项 →
             </button>
@@ -177,7 +193,7 @@ export default function TreatmentDetailPage() {
 
       {showModal && (
         <TreatmentModal
-          treatment={treatment}
+          treatment={{ ...treatment, kb_treatments: kbItem }}
           onSave={() => { setShowModal(false); fetchTreatment() }}
           onClose={() => setShowModal(false)} />
       )}
