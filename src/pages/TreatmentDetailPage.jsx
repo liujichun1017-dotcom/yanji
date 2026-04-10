@@ -42,7 +42,7 @@ export default function TreatmentDetailPage() {
     setLoading(true)
     const { data } = await supabase
       .from('treatments')
-      .select('*, clinics(name), kb_treatments(id, name, category)')
+      .select('*, clinics(name), kb_treatments(id, name)')
       .eq('id', id)
       .eq('user_id', user.id)
       .single()
