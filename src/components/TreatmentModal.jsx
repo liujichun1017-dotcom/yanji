@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
-import { CATEGORIES, STATUSES, formatMoneyFull } from '../lib/constants'
+import { CATEGORIES, formatMoneyFull } from '../lib/constants'
 
 export default function TreatmentModal({ treatment, onSave, onClose }) {
   const { user } = useAuth()
@@ -19,33 +19,20 @@ export default function TreatmentModal({ treatment, onSave, onClose }) {
     notes:            treatment?.notes            ?? '',
   })
 
-  // cost display value (formatted on blur, raw while focused)
   const [costDisplay, setCostDisplay] = useState(
     treatment?.cost != null ? formatMoneyFull(treatment.cost) : ''
   )
 
-  const [clinics, setClinics] = useState([])
-  const [kbList, setKbList]   = useState([])
-  const [kbSearch, setKbSearch]       = useState(treatment?.kb_treatments?.name ?? '')
-  const [showKbDrop, setShowKbDrop]   = useState(false)
+  const [clinics, setClinics]           = useState([])
+  const [kbList, setKbList]             = useState([])
   const [showNewClinic, setShowNewClinic] = useState(false)
   const [newClinicName, setNewClinicName] = useState('')
-  const [saving, setSaving]   = useState(false)
-  const [error, setError]     = useState('')
-
-  const kbRef = useRef(null)
+  const [saving, setSaving]             = useState(false)
+  const [error, setError]               = useState('')
 
   useEffect(() => {
     fetchClinics()
     fetchKb()
-  }, [])
-
-  useEffect(() => {
-    function onOutsideClick(e) {
-      if (kbRef.current && !kbRef.current.contains(e.target)) setShowKbDrop(false)
-    }
-    document.addEventListener('mousedown', onOutsideClick)
-    return () => document.removeEventListener('mousedown', onOutsideClick)
   }, [])
 
   async function fetchClinics() {
@@ -56,7 +43,9 @@ export default function TreatmentModal({ treatment, onSave, onClose }) {
 
   async function fetchKb() {
     const { data } = await supabase
-      .from('kb_treatments').select('id, name, category').order('name')
+      .from('kb_treatments')
+      .select('id, name, kb_categories(name)')
+      .order('name')
     setKbList(data ?? [])
   }
 
@@ -78,17 +67,6 @@ export default function TreatmentModal({ treatment, onSave, onClose }) {
       setForm(f => ({ ...f, cost: '' }))
       setCostDisplay('')
     }
-  }
-
-  // ── KB search handlers ───────────────────────────────────────────────────
-  function selectKb(item) {
-    setForm(f => ({ ...f, kb_treatment_id: item.id }))
-    setKbSearch(item.name)
-    setShowKbDrop(false)
-  }
-  function clearKb() {
-    setForm(f => ({ ...f, kb_treatment_id: '' }))
-    setKbSearch('')
   }
 
   // ── Clinic inline create ─────────────────────────────────────────────────
@@ -145,9 +123,13 @@ export default function TreatmentModal({ treatment, onSave, onClose }) {
     }
   }
 
-  const filteredKb = kbList.filter(t =>
-    t.name.toLowerCase().includes(kbSearch.toLowerCase())
-  )
+  // ── KB grouped by category ───────────────────────────────────────────────
+  const kbByCategory = kbList.reduce((acc, t) => {
+    const cat = t.kb_categories?.name ?? '其他'
+    if (!acc[cat]) acc[cat] = []
+    acc[cat].push(t)
+    return acc
+  }, {})
 
   return (
     <>
@@ -252,46 +234,21 @@ export default function TreatmentModal({ treatment, onSave, onClose }) {
               </div>
             </div>
 
-            {/* 状态 */}
-            <div>
-              <label className="form-label">状态</label>
-              <div className="flex gap-2 flex-wrap">
-                {STATUSES.map(s => (
-                  <button key={s.value} type="button"
-                    onClick={() => setForm(f => ({ ...f, status: s.value }))}
-                    className={`px-4 py-1.5 rounded-full text-[12px] font-sans transition-colors ${
-                      form.status === s.value ? 'bg-ink text-cream' : 'bg-cream-deep text-ink-soft hover:bg-sand'
-                    }`}>
-                    {s.value}
-                  </button>
-                ))}
-              </div>
-            </div>
-
             {/* 关联知识库 */}
-            <div ref={kbRef}>
+            <div>
               <label className="form-label">关联知识库项目</label>
-              <div className="relative">
-                <input type="text" className="input-field pr-8" placeholder="搜索项目名称..."
-                  value={kbSearch}
-                  onChange={e => { setKbSearch(e.target.value); setShowKbDrop(true) }}
-                  onFocus={() => setShowKbDrop(true)} />
-                {form.kb_treatment_id && (
-                  <button type="button" onClick={clearKb}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink text-[18px] leading-none">×</button>
-                )}
-                {showKbDrop && filteredKb.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 bg-white border border-sand rounded-[10px] shadow-lg z-10 max-h-48 overflow-y-auto mt-1">
-                    {filteredKb.map(t => (
-                      <button key={t.id} type="button" onClick={() => selectKb(t)}
-                        className="w-full text-left px-4 py-2.5 hover:bg-cream text-[13px] text-ink flex justify-between items-center">
-                        <span>{t.name}</span>
-                        <span className="text-[11px] text-ink-muted">{t.category}</span>
-                      </button>
+              <select className="input-field" value={form.kb_treatment_id}
+                onChange={e => setForm(f => ({ ...f, kb_treatment_id: e.target.value }))}>
+                <option value="">不关联</option>
+                {Object.entries(kbByCategory).map(([cat, items]) => (
+                  <optgroup key={cat} label={`── ${cat}`}>
+                    {items.map(t => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
                     ))}
-                  </div>
-                )}
-              </div>
+                  </optgroup>
+                ))}
+              </select>
+              <p className="text-[10px] text-ink-muted mt-1 tracking-wide">关联后可查看术后护理指南</p>
             </div>
 
             {/* 备注 */}
