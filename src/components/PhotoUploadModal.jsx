@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 
 const PHASES = ['术前', '术后1周', '术后1月', '术后3月']
+const PHASE_KEY = { '术前': 'before', '术后1周': 'after-1w', '术后1月': 'after-1m', '术后3月': 'after-3m' }
 
 export default function PhotoUploadModal({ treatment, treatments, onSave, onClose }) {
   const { user } = useAuth()
@@ -41,9 +42,10 @@ export default function PhotoUploadModal({ treatment, treatments, onSave, onClos
       })
       setProgress(40)
 
-      // Build storage path
-      const ext  = file.name.split('.').pop() || 'jpg'
-      const path = `${user.id}/${tid}/${phase}_${Date.now()}.${ext}`
+      // Build storage path（用英文 key 避免中文路径问题）
+      const ext     = file.name.split('.').pop().toLowerCase() || 'jpg'
+      const phaseKey = PHASE_KEY[phase] || 'before'
+      const path    = `${user.id}/${tid}/${phaseKey}_${Date.now()}.${ext}`
 
       // Upload to storage
       const { error: uploadErr } = await supabase.storage
